@@ -3,27 +3,86 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>班級專屬拍貼機</title>
+    <title>✨ 班級專屬拍貼機 ✨</title>
+    <!-- 載入 React 核心庫 -->
     <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <!-- 載入 Babel 用於瀏覽器解析 JSX -->
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <!-- 載入 Tailwind CSS 樣式庫 -->
     <script src="https://cdn.tailwindcss.com"></script>
+    <!-- 載入 Lucide 圖示庫 -->
+    <script src="https://unpkg.com/lucide@0.344.0/dist/umd/lucide.min.js"></script>
     <style>
-        body { touch-action: manipulation; }
-        .canvas-container { display: none; }
+        /* 禁止 iOS 點擊延遲與改善觸控體驗 */
+        body { touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
+        .mirror { transform: scaleX(-1); }
     </style>
 </head>
 <body class="bg-gray-50">
     <div id="root"></div>
 
     <script type="text/babel">
+        // 從全域變數中取出 React Hook
         const { useState, useRef, useEffect } = React;
 
-        // 相框配置
+        // 自定義 Lucide 圖示組件，因為在 HTML 中使用方式不同
+        const Icon = ({ name, size = 24, className = "" }) => {
+            const iconRef = useRef(null);
+            useEffect(() => {
+                if (window.lucide) {
+                    window.lucide.createIcons();
+                }
+            }, [name]);
+            return <i data-lucide={name} style={{ width: size, height: size }} className={className}></i>;
+        };
+
+        // ==========================================
+        // 1. 相框設定區
+        // ==========================================
         const FRAMES = [
-            { id: 'blue', name: '經典藍', bgColor: '#3b82f6', textColor: '#ffffff' },
-            { id: 'pink', name: '可愛粉', bgColor: '#f472b6', textColor: '#ffffff' },
-            { id: 'dark', name: '酷炫黑', bgColor: '#18181b', textColor: '#ffffff' }
+            {
+                id: 'blue-classic',
+                name: '經典藍色',
+                bgColor: '#3b82f6',
+                textColor: '#ffffff',
+                width: 600,
+                height: 1800,
+                slots: [
+                    { x: 30, y: 120, width: 540, height: 380 },
+                    { x: 30, y: 520, width: 540, height: 380 },
+                    { x: 30, y: 920, width: 540, height: 380 },
+                    { x: 30, y: 1320, width: 540, height: 380 },
+                ]
+            },
+            {
+                id: 'pink-cute',
+                name: '可愛粉紅',
+                bgColor: '#f472b6',
+                textColor: '#ffffff',
+                width: 600,
+                height: 1800,
+                slots: [
+                    { x: 30, y: 120, width: 540, height: 380 },
+                    { x: 30, y: 520, width: 540, height: 380 },
+                    { x: 30, y: 920, width: 540, height: 380 },
+                    { x: 30, y: 1320, width: 540, height: 380 },
+                ]
+            },
+            {
+                id: 'black-film',
+                name: '復古底片',
+                bgColor: '#171717',
+                textColor: '#ffffff',
+                width: 600,
+                height: 1800,
+                slots: [
+                    { x: 30, y: 120, width: 540, height: 380 },
+                    { x: 30, y: 520, width: 540, height: 380 },
+                    { x: 30, y: 920, width: 540, height: 380 },
+                    { x: 30, y: 1320, width: 540, height: 380 },
+                ]
+            }
         ];
 
         function App() {
@@ -32,40 +91,53 @@
             const [photos, setPhotos] = useState([]);
             const [countdown, setCountdown] = useState(null);
             const [finalImage, setFinalImage] = useState(null);
+            
             const videoRef = useRef(null);
+            const streamRef = useRef(null);
 
-            // 啟動相機
             const startCamera = async () => {
                 try {
-                    const stream = await navigator.mediaDevices.getUserMedia({ 
-                        video: { facingMode: 'user', width: 1280, height: 720 } 
+                    const stream = await navigator.mediaDevices.getUserMedia({
+                        video: { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 720 } },
+                        audio: false
                     });
-                    videoRef.current.srcObject = stream;
+                    if (videoRef.current) videoRef.current.srcObject = stream;
+                    streamRef.current = stream;
                 } catch (err) {
-                    alert("請允許相機權限！");
+                    alert("無法存取相機，請檢查瀏覽器權限！");
                     setStep('select');
+                }
+            };
+
+            const stopCamera = () => {
+                if (streamRef.current) {
+                    streamRef.current.getTracks().forEach(track => track.stop());
+                    streamRef.current = null;
                 }
             };
 
             useEffect(() => {
                 if (step === 'camera') startCamera();
+                else stopCamera();
+                return () => stopCamera();
             }, [step]);
 
             const takePhoto = () => {
-                let count = 3;
-                setCountdown(count);
+                if (photos.length >= 4) return;
+                let counter = 3;
+                setCountdown(counter);
                 const timer = setInterval(() => {
-                    count--;
-                    if (count > 0) setCountdown(count);
+                    counter -= 1;
+                    if (counter > 0) setCountdown(counter);
                     else {
                         clearInterval(timer);
                         setCountdown(null);
-                        capture();
+                        captureFrame();
                     }
                 }, 1000);
             };
 
-            const capture = () => {
+            const captureFrame = () => {
                 const video = videoRef.current;
                 const canvas = document.createElement('canvas');
                 canvas.width = video.videoWidth;
@@ -74,86 +146,123 @@
                 ctx.translate(canvas.width, 0);
                 ctx.scale(-1, 1);
                 ctx.drawImage(video, 0, 0);
-                
-                const data = canvas.toDataURL('image/jpeg');
+                const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
                 setPhotos(prev => {
-                    const next = [...prev, data];
-                    if (next.length === 4) setStep('processing');
+                    const next = [...prev, dataUrl];
+                    if (next.length >= 4) setStep('processing');
                     return next;
                 });
             };
 
             useEffect(() => {
-                if (step === 'processing') compose();
+                if (step === 'processing') composeFinalImage();
             }, [step]);
 
-            const compose = async () => {
+            const composeFinalImage = async () => {
                 const canvas = document.createElement('canvas');
                 const ctx = canvas.getContext('2d');
-                canvas.width = 600;
-                canvas.height = 1800;
+                const frame = selectedFrame;
+                canvas.width = frame.width;
+                canvas.height = frame.height;
 
-                ctx.fillStyle = selectedFrame.bgColor;
-                ctx.fillRect(0, 0, 600, 1800);
-                
-                ctx.fillStyle = "#ffffff";
-                ctx.font = "bold 40px Arial";
-                ctx.textAlign = "center";
-                ctx.fillText("PHOTOISM STYLE", 300, 80);
+                ctx.fillStyle = frame.bgColor;
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.fillStyle = frame.textColor;
+                ctx.font = 'bold 45px sans-serif';
+                ctx.textAlign = 'center';
+                ctx.fillText('CLASS PHOTO', canvas.width / 2, 75);
 
-                for(let i=0; i<4; i++) {
+                for (let i = 0; i < 4; i++) {
+                    const slot = frame.slots[i];
                     const img = new Image();
                     img.src = photos[i];
                     await new Promise(r => img.onload = r);
-                    ctx.fillStyle = "white";
-                    ctx.fillRect(45, 145 + (i * 410), 510, 390); // 外框
-                    ctx.drawImage(img, 50, 150 + (i * 410), 500, 380);
+                    const imgRatio = img.width / img.height;
+                    const slotRatio = slot.width / slot.height;
+                    let sw = img.width, sh = img.height, sx = 0, sy = 0;
+                    if (imgRatio > slotRatio) { sw = img.height * slotRatio; sx = (img.width - sw) / 2; }
+                    else { sh = img.width / slotRatio; sy = (img.height - sh) / 2; }
+                    ctx.fillStyle = '#ffffff';
+                    ctx.fillRect(slot.x - 5, slot.y - 5, slot.width + 10, slot.height + 10);
+                    ctx.drawImage(img, sx, sy, sw, sh, slot.x, slot.y, slot.width, slot.height);
                 }
 
+                ctx.fillStyle = frame.textColor;
+                ctx.font = '24px sans-serif';
+                ctx.fillText('KEEP YOURSELF ALIVE', canvas.width / 2, canvas.height - 40);
                 setFinalImage(canvas.toDataURL('image/png'));
                 setStep('result');
             };
 
             return (
-                <div className="max-w-md mx-auto min-h-screen flex flex-col p-4">
-                    {step === 'select' && (
-                        <div className="text-center py-10">
-                            <h1 className="text-3xl font-bold mb-8">選擇相框顏色</h1>
-                            <div className="grid grid-cols-3 gap-4 mb-10">
-                                {FRAMES.map(f => (
-                                    <div key={f.id} onClick={() => setSelectedFrame(f)} 
-                                         className={`h-24 rounded-lg border-4 ${selectedFrame.id === f.id ? 'border-black' : 'border-transparent'}`}
-                                         style={{backgroundColor: f.bgColor}}></div>
-                                ))}
-                            </div>
-                            <button onClick={() => setStep('camera')} className="bg-blue-600 text-white px-8 py-3 rounded-full font-bold w-full">開始製作</button>
-                        </div>
-                    )}
+                <div className="min-h-screen bg-gray-50 flex flex-col items-center py-10 px-4">
+                    <div className="max-w-4xl w-full text-center mb-8">
+                        <h1 className="text-4xl font-extrabold text-gray-900 mb-2">✨ 班級專屬拍貼機 ✨</h1>
+                        <p className="text-gray-500">選擇相框、擺好姿勢，記錄美好瞬間！</p>
+                    </div>
 
-                    {step === 'camera' && (
-                        <div className="relative">
-                            <video ref={videoRef} autoPlay playsInline className="w-full rounded-xl bg-black mirror scale-x-[-1]"></video>
-                            {countdown && <div className="absolute inset-0 flex items-center justify-center text-white text-9xl font-bold bg-black/20">{countdown}</div>}
-                            <div className="mt-4 grid grid-cols-4 gap-2">
-                                {[0,1,2,3].map(i => (
-                                    <div key={i} className="h-20 bg-gray-200 rounded overflow-hidden">
-                                        {photos[i] && <img src={photos[i]} className="w-full h-full object-cover" />}
+                    <div className="w-full max-w-4xl bg-white rounded-3xl shadow-xl overflow-hidden border border-gray-100 flex flex-col min-h-[60vh] relative">
+                        {step === 'select' && (
+                            <div className="p-8 flex-grow flex flex-col items-center">
+                                <h2 className="text-2xl font-bold mb-6">請選擇相框</h2>
+                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 w-full max-w-2xl">
+                                    {FRAMES.map(f => (
+                                        <div key={f.id} onClick={() => setSelectedFrame(f)} 
+                                             className={`cursor-pointer rounded-2xl p-4 border-4 transition-all ${selectedFrame.id === f.id ? 'border-blue-500 scale-105' : 'border-transparent hover:bg-gray-50'}`}>
+                                            <div className="w-24 h-48 mx-auto rounded-lg shadow-inner mb-2" style={{backgroundColor: f.bgColor}}></div>
+                                            <div className="text-center font-bold">{f.name}</div>
+                                        </div>
+                                    ))}
+                                </div>
+                                <button onClick={() => setStep('camera')} className="mt-10 bg-blue-600 text-white px-10 py-4 rounded-full font-bold text-xl shadow-lg flex items-center gap-2">
+                                    <Icon name="camera" /> 開始拍攝
+                                </button>
+                            </div>
+                        )}
+
+                        {step === 'camera' && (
+                            <div className="flex-grow flex flex-col lg:flex-row bg-black text-white min-h-[500px]">
+                                <div className="flex-grow relative bg-gray-900 overflow-hidden flex items-center justify-center">
+                                    <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover mirror" />
+                                    {countdown && <div className="absolute inset-0 flex items-center justify-center bg-black/30 text-[120px] font-black">{countdown}</div>}
+                                    <div className="absolute top-4 left-4 bg-black/50 px-3 py-1 rounded-full text-xs">進度：{photos.length}/4</div>
+                                </div>
+                                <div className="w-full lg:w-72 p-6 flex flex-col gap-4 bg-gray-900 border-l border-gray-800">
+                                    <div className="grid grid-cols-4 lg:grid-cols-1 gap-2">
+                                        {[0,1,2,3].map(i => (
+                                            <div key={i} className="aspect-video bg-gray-800 rounded border border-gray-700 overflow-hidden">
+                                                {photos[i] && <img src={photos[i]} className="w-full h-full object-cover" />}
+                                            </div>
+                                        ))}
                                     </div>
-                                ))}
+                                    <button onClick={takePhoto} disabled={countdown || photos.length >= 4} className="w-full bg-white text-black py-4 rounded-full font-bold disabled:opacity-50">
+                                        {countdown ? '準備中...' : '按此拍照'}
+                                    </button>
+                                    <button onClick={() => setStep('select')} className="text-gray-400 text-sm">重新選擇</button>
+                                </div>
                             </div>
-                            <button onClick={takePhoto} disabled={countdown} className="mt-6 w-full bg-red-500 text-white py-4 rounded-full font-bold text-xl">
-                                {countdown ? '準備中...' : `拍攝第 ${photos.length + 1} 張`}
-                            </button>
-                        </div>
-                    )}
+                        )}
 
-                    {step === 'result' && (
-                        <div className="text-center">
-                            <img src={finalImage} className="w-64 mx-auto shadow-2xl mb-6" />
-                            <div className="bg-yellow-100 p-3 rounded mb-4 text-sm">iPad 使用者請「長按圖片」選擇儲存相片</div>
-                            <button onClick={() => window.location.reload()} className="text-blue-600 font-bold">重新拍攝</button>
-                        </div>
-                    )}
+                        {step === 'processing' && (
+                            <div className="flex-grow flex flex-col items-center justify-center p-20">
+                                <div className="w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mb-4"></div>
+                                <div className="text-xl font-bold">正在洗照片...</div>
+                            </div>
+                        )}
+
+                        {step === 'result' && (
+                            <div className="p-8 flex flex-col md:flex-row items-center justify-center gap-8 bg-gray-50">
+                                <img src={finalImage} className="w-56 shadow-2xl border border-gray-200" />
+                                <div className="flex flex-col gap-4 max-w-xs">
+                                    <div className="bg-yellow-50 p-4 rounded-xl border border-yellow-200 text-sm">
+                                        <p className="font-bold text-yellow-800">💡 儲存提示：</p>
+                                        <p className="text-yellow-700">iPad 同學請「長按照片」並選擇「儲存影像」即可保存！</p>
+                                    </div>
+                                    <button onClick={() => window.location.reload()} className="w-full bg-blue-600 text-white py-4 rounded-xl font-bold">再拍一次</button>
+                                </div>
+                            </div>
+                        )}
+                    </div>
                 </div>
             );
         }
