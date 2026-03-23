@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>班級專屬拍貼機</title>
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { touch-action: manipulation; }
+        .canvas-container { display: none; }
+    </style>
+</head>
+<body class="bg-gray-50">
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useRef, useEffect } = React;
+
+        // 相框配置
+        const FRAMES = [
+            { id: 'blue', name: '經典藍', bgColor: '#3b82f6', textColor: '#ffffff' },
+            { id: 'pink', name: '可愛粉', bgColor: '#f472b6', textColor: '#ffffff' },
+            { id: 'dark', name: '酷炫黑', bgColor: '#18181b', textColor: '#ffffff' }
+        ];
+
+        function App() {
+            const [step, setStep] = useState('select');
+            const [selectedFrame, setSelectedFrame] = useState(FRAMES[0]);
+            const [photos, setPhotos] = useState([]);
+            const [countdown, setCountdown] = useState(null);
+            const [finalImage, setFinalImage] = useState(null);
+            const videoRef = useRef(null);
+
+            // 啟動相機
+            const startCamera = async () => {
+                try {
+                    const stream = await navigator.mediaDevices.getUserMedia({ 
+                        video: { facingMode: 'user', width: 1280, height: 720 } 
+                    });
+                    videoRef.current.srcObject = stream;
+                } catch (err) {
+                    alert("請允許相機權限！");
+                    setStep('select');
+                }
+            };
+
+            useEffect(() => {
+                if (step === 'camera') startCamera();
+            }, [step]);
+
+            const takePhoto = () => {
+                let count = 3;
+                setCountdown(count);
+                const timer = setInterval(() => {
+                    count--;
+                    if (count > 0) setCountdown(count);
+                    else {
+                        clearInterval(timer);
+                        setCountdown(null);
+                        capture();
+                    }
+                }, 1000);
+            };
+
+            const capture = () => {
+                const video = videoRef.current;
+                const canvas = document.createElement('canvas');
+                canvas.width = video.videoWidth;
+                canvas.height = video.videoHeight;
+                const ctx = canvas.getContext('2d');
+                ctx.translate(canvas.width, 0);
+                ctx.scale(-1, 1);
+                ctx.drawImage(video, 0, 0);
+                
+                const data = canvas.toDataURL('image/jpeg');
+                setPhotos(prev => {
+                    const next = [...prev, data];
+                    if (next.length === 4) setStep('processing');
+                    return next;
+                });
+            };
+
+            useEffect(() => {
+                if (step === 'processing') compose();
+            }, [step]);
+
+            const compose = async () => {
+                const canvas = document.createElement('canvas');
+                const ctx = canvas.getContext('2d');
+                canvas.width = 600;
+                canvas.height = 1800;
+
+                ctx.fillStyle = selectedFrame.bgColor;
+                ctx.fillRect(0, 0, 600, 1800);
+                
+                ctx.fillStyle = "#ffffff";
+                ctx.font = "bold 40px Arial";
+                ctx.textAlign = "center";
+                ctx.fillText("PHOTOISM STYLE", 300, 80);
+
+                for(let i=0; i<4; i++) {
+                    const img = new Image();
+                    img.src = photos[i];
+                    await new Promise(r => img.onload = r);
+                    ctx.fillStyle = "white";
+                    ctx.fillRect(45, 145 + (i * 410), 510, 390); // 外框
+                    ctx.drawImage(img, 50, 150 + (i * 410), 500, 380);
+                }
+
+                setFinalImage(canvas.toDataURL('image/png'));
+                setStep('result');
+            };
+
+            return (
+                <div className="max-w-md mx-auto min-h-screen flex flex-col p-4">
+                    {step === 'select' && (
+                        <div className="text-center py-10">
+                            <h1 className="text-3xl font-bold mb-8">選擇相框顏色</h1>
+                            <div className="grid grid-cols-3 gap-4 mb-10">
+                                {FRAMES.map(f => (
+                                    <div key={f.id} onClick={() => setSelectedFrame(f)} 
+                                         className={`h-24 rounded-lg border-4 ${selectedFrame.id === f.id ? 'border-black' : 'border-transparent'}`}
+                                         style={{backgroundColor: f.bgColor}}></div>
+                                ))}
+                            </div>
+                            <button onClick={() => setStep('camera')} className="bg-blue-600 text-white px-8 py-3 rounded-full font-bold w-full">開始製作</button>
+                        </div>
+                    )}
+
+                    {step === 'camera' && (
+                        <div className="relative">
+                            <video ref={videoRef} autoPlay playsInline className="w-full rounded-xl bg-black mirror scale-x-[-1]"></video>
+                            {countdown && <div className="absolute inset-0 flex items-center justify-center text-white text-9xl font-bold bg-black/20">{countdown}</div>}
+                            <div className="mt-4 grid grid-cols-4 gap-2">
+                                {[0,1,2,3].map(i => (
+                                    <div key={i} className="h-20 bg-gray-200 rounded overflow-hidden">
+                                        {photos[i] && <img src={photos[i]} className="w-full h-full object-cover" />}
+                                    </div>
+                                ))}
+                            </div>
+                            <button onClick={takePhoto} disabled={countdown} className="mt-6 w-full bg-red-500 text-white py-4 rounded-full font-bold text-xl">
+                                {countdown ? '準備中...' : `拍攝第 ${photos.length + 1} 張`}
+                            </button>
+                        </div>
+                    )}
+
+                    {step === 'result' && (
+                        <div className="text-center">
+                            <img src={finalImage} className="w-64 mx-auto shadow-2xl mb-6" />
+                            <div className="bg-yellow-100 p-3 rounded mb-4 text-sm">iPad 使用者請「長按圖片」選擇儲存相片</div>
+                            <button onClick={() => window.location.reload()} className="text-blue-600 font-bold">重新拍攝</button>
+                        </div>
+                    )}
+                </div>
+            );
+        }
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
